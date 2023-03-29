@@ -48,8 +48,9 @@ async def queuebuild():
 
         with open(mypath + "/" + set) as json_file:
             jsondata[set] = json.load(json_file)
-            
-    queue.append(set)
+            #print(jsondata)
+            queue.append(set)
+    #print(queue)
     
 @bot.command()
 async def join(ctx):
@@ -58,9 +59,8 @@ async def join(ctx):
         await voice_channel.connect()
         global abc 
         abc = ctx.guild
-        asyncio.sleep(1.5)
-
-        await tracklist.start()
+        await asyncio.sleep(1.5)
+        await setplay.start(queue, jsondata)
         await ctx.send("hi")
     except:
         await ctx.send("You are not in a voice channel")
@@ -98,29 +98,57 @@ async def unpause(ctx):
 
 
 @tasks.loop(seconds=0.5)
-async def tracklist():
+async def setplay(queue, jsondata):
     bot_voice_client = discord.utils.get(bot.voice_clients, guild= abc)
-    print(queue)
+
     if bot_voice_client.is_paused():
         pass
     elif bot_voice_client == None or bot_voice_client.is_playing() == False:
         current_timestamp = 0
+        played_sets.append(queue.pop(0))
         if bot_voice_client == None:
             vc = await discord.object(voice_channel).connect()
-            vc.play(discord.FFmpegOpusAudio(source=jsondata(queue[0]).get("file")))
+            vc.play(discord.FFmpegOpusAudio(source=jsondata.get(queue[0]).get("file")))
         elif len(queue) == 0:
             queue = random.shuffle(played_sets)
         elif len(queue) > 0:
-            played_sets.append(queue.pop(0))
-            file = jsondata(queue[0]).get("file")
+
+            file = jsondata.get(queue[0]).get("file")
             ffmpegcheck = os.system(f'ffprobe -i {file} -show_entries format=duration -of csv="p=0" > time.txt')
             if ffmpegcheck == 1:
                 raise FileNotFoundError
             with open("time.txt",'r') as myfile:
                 time_sec = float(str(myfile.readlines()[0]).strip())    
                 time_hms = sec_to_hms(time_sec)
-            vc.play(discord.FFmpegOpusAudio(source=jsondata(queue[0]).get("file")))
-            await bot.get_channel(bot_voice_client).send(embed=discord.Embed(title =f"Now Playing `{queue[0].get('performer')}`", color=queue[0].get('color')))
+            color_hold = jsondata.get(queue[0]).get('color')     
+            color = int(color_hold[1:], 16)
+            bot_voice_client.play(discord.FFmpegOpusAudio(source=jsondata.get(queue[0]).get("file")))
+            await bot_voice_client.channel.send(embed=discord.Embed(title =f"Now Playing `{jsondata.get(queue[0]).get('performer')} - Dischead Jockeys {jsondata.get(queue[0]).get('set')}` ", description=f"Originally aired on:  `{jsondata.get(queue[0]).get('date')}`", color = color))
+            await tracklisting.start(queue, jsondata)
+        else:
+            current_timestamp += 0.5
+            print(current_timestamp)
+            
+@tasks.loop(seconds=0.5)
+async def tracklisting(queue, jsondata):
+    played = []
+    bot_voice_client = discord.utils.get(bot.voice_clients, guild= abc)
+
+    for i in jsondata.get(queue[0]).get("tracks"):
+        time = mmss_to_sec(jsondata.get(queue[0]).get("tracks").get(i).get("timestamp"))
+        #if i not in played:
+        track = jsondata.get(queue[0]).get("tracks").get(i)
+        print(time, track)
+        print(current_timestamp)
+        if current_timestamp > time:
+            title = f"Now playing `{track.get('artist')} - {track.get('title')}"
+            desc = f"Dischead Jockeys {jsondata.get(queue[0]).get('set')}, preformed by `{jsondata.get(queue[0]).get('performer')}`"
+            color_hold = jsondata.get(queue[0]).get('color')     
+            color = int(color_hold[1:], 16)
+            await bot_voice_client.channel.send(embed=discord.Embed(title = title, description=desc, color = color))
+            played.append(i)
+            print(played)
+
 
 
 @bot.event

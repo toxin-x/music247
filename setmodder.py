@@ -10,7 +10,8 @@ for set in setlists:
         data = json.load(json_file)
         if not "file" in data:
             x = input(set + " audio: ")
-            data["file"] = x
-            
+            data["file"] = str(x)
+            print(data)
             with open(mypath+"/"+set, "w") as json_file:
+
                 json.dump(json_file, data, indent=2)
