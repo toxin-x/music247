@@ -21,7 +21,7 @@ bot = commands.Bot(command_prefix=PREFIX, intents=intents, max_messages=10000, h
 queue = []
 played_sets = []
 jsondata = {}
-current_timestamp=0
+current_timestamp = 0
 voice_channel = None
 
 def sec_to_hms(seconds):
@@ -100,12 +100,13 @@ async def unpause(ctx):
 @tasks.loop(seconds=0.5)
 async def setplay(queue, jsondata):
     bot_voice_client = discord.utils.get(bot.voice_clients, guild= abc)
+    global current_timestamp
 
     if bot_voice_client.is_paused():
         pass
     elif bot_voice_client == None or bot_voice_client.is_playing() == False:
         current_timestamp = 0
-        played_sets.append(queue.pop(0))
+        #played_sets.append(queue.pop(0))
         if bot_voice_client == None:
             vc = await discord.object(voice_channel).connect()
             vc.play(discord.FFmpegOpusAudio(source=jsondata.get(queue[0]).get("file")))
@@ -125,9 +126,9 @@ async def setplay(queue, jsondata):
             bot_voice_client.play(discord.FFmpegOpusAudio(source=jsondata.get(queue[0]).get("file")))
             await bot_voice_client.channel.send(embed=discord.Embed(title =f"Now Playing `{jsondata.get(queue[0]).get('performer')} - Dischead Jockeys {jsondata.get(queue[0]).get('set')}` ", description=f"Originally aired on:  `{jsondata.get(queue[0]).get('date')}`", color = color))
             await tracklisting.start(queue, jsondata)
-        else:
-            current_timestamp += 0.5
-            print(current_timestamp)
+    else:
+        current_timestamp += 0.5
+        print(current_timestamp)
             
 @tasks.loop(seconds=0.5)
 async def tracklisting(queue, jsondata):
