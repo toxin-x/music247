@@ -8,13 +8,25 @@ import json
 from typing import Optional
 import random
 import asyncio
+import time
+import datetime
+import math
+
 
 load_dotenv()
+
+if not os.path.exists("setlists"):
+    os.mkdir("setlists")
+
+if not os.path.exists("sids"):
+    os.mkdir("sids")
+
+
 TOKEN = os.getenv('TOKEN')
 OWNER_ID = os.getenv('OWNER_ID')
 SERVER_ID =os.getenv('SERVER_ID')
-#VC_ID = os.getenv('VC_ID')
 PREFIX = os.getenv('PREFIX')
+MOD_ID = os.getenv('MOD_ID')
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix=PREFIX, intents=intents, max_messages=10000, help_command=None)
 
@@ -24,7 +36,12 @@ jsondata = {}
 current_timestamp = 0
 voice_channel = None
 played_tracks = []
+time_sec= None
 time_hms= None
+sid_played = True
+sid_list = []
+current_msgs = []
+
 
 def sec_to_hms(seconds):
     seconds_round = round(seconds)
@@ -47,16 +64,45 @@ def mmss_to_sec(mmss):
 
 async def queuebuild():
     mypath = "setlists"
+    global new_sets
+    new_sets = [] 
     tracklists = [f for f in os.listdir(mypath) if os.path.isfile(os.path.join(mypath, f)) ]
     for set in tracklists:
+        if not set in queue:
+            with open(mypath + "/" + set) as json_file:
+                jsondata[set] = json.load(json_file)
+                #print(jsondata)
+                queue.append(set)
+                new_sets.append(set)    
+                #print(new_sets)
 
-        with open(mypath + "/" + set) as json_file:
-            jsondata[set] = json.load(json_file)
-            #print(jsondata)
-            queue.append(set)
-    #print(queue)
+async def sidbuild():
+    mypath = "sids"
+    global new_sids
+    global sid_list
+    new_sids = [] 
+    sid_list = [f for f in os.listdir(mypath) if os.path.isfile(os.path.join(mypath, f)) ]
+    print(sid_list)
+    # for sid in sids:
+    #     if not sid in sid_list:
+    #         print(sid_list)
+    #         sid_list.append(sid)
+    #         new_sids.append(sid)    
+    #         print(new_sids)
+
+
+
+
+#MOD COMMANDS
+@bot.command()
+@commands.has_role(int(MOD_ID))
+async def qbuild(ctx):
+    await queuebuild()
+    
+    ctx.send(str(new_sets))
     
 @bot.command()
+@commands.has_role(int(MOD_ID))
 async def join(ctx):
     try:
         voice_channel = ctx.author.voice.channel
@@ -65,11 +111,11 @@ async def join(ctx):
         abc = ctx.guild
         await asyncio.sleep(1.5)
         await setplay.start(queue, jsondata)
-        await ctx.send("hi")
     except:
-        await ctx.send("You are not in a voice channel")
+        await ctx.send(embed=discord.Embed(description="You are not in a voice channel", color=0x00aeff))
 
 @bot.command()
+@commands.has_role(int(MOD_ID))
 async def dc(ctx):
     try:
         bot_voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
@@ -80,9 +126,10 @@ async def dc(ctx):
         await ctx.send("disconnected from channel")
     except:
         #discord.utils.get(bot.voice_clients, guild=ctx.guild)
-        await ctx.send("You are not in a voice channel")
+        await ctx.send(embed=discord.Embed(description="You are not in a voice channel", color=0x00aeff))
 
 @bot.command()
+@commands.has_role(int(MOD_ID))
 async def pause(ctx):
     try:
         bot_voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
@@ -92,6 +139,7 @@ async def pause(ctx):
         await ctx.send("an error occured")
         
 @bot.command()
+@commands.has_role(int(MOD_ID))
 async def unpause(ctx):
     try:
         bot_voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
@@ -101,19 +149,90 @@ async def unpause(ctx):
         await ctx.send("an error occured")
 
 @bot.command()
+@commands.has_role(int(MOD_ID))
 async def seek(ctx, text):
     if type(mmss_to_sec(text)) == int:
         global current_timestamp
         current_timestamp = mmss_to_sec(text)
         bot_voice_client = discord.utils.get(bot.voice_clients, guild= abc)
         bot_voice_client.source = discord.FFmpegOpusAudio(source=jsondata.get(queue[qpos]).get("file"), before_options=f"-ss {str(mmss_to_sec(text))}")
-    
         await ctx.send(f"seeked to {text}")
     elif type(mmss_to_sec(text)) != int:
         await ctx.send(f"{text} could not be converted to a time")
     
     else: 
         await ctx.send("an error occured")
+
+@bot.command()
+@commands.has_role(int(MOD_ID))
+async def skip(ctx):
+        bot_voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+        bot_voice_client.stop()
+        await ctx.send(embed=discord.Embed(description="File stopped.", color=0x00aeff))
+
+
+#USER COMMANDS
+
+@bot.command()
+async def q(ctx):
+    j=0
+    timeleft= time_sec - current_timestamp
+    msg = ""
+    global qpos
+    settime_sec = [0]
+    while j < 6 and j < len(queue) - qpos:
+#        print("-------------")
+        file = jsondata.get(queue[qpos+j]).get("file")
+        ffmpegcheck = os.system(f'ffprobe -i {file} -show_entries format=duration -of csv="p=0" > timequeue.txt')
+        if ffmpegcheck == 1:
+            raise FileNotFoundError        
+        if j == 0:
+            with open("timequeue.txt",'r') as myfile:
+                settime_sec[0] = (float(str(myfile.readlines()[0]).strip()))
+            next_time = timeleft
+            time_out = math.ceil(next_time + time.time())
+            if queue[qpos+j][0].isdigit():
+                set_title = f"DJ {jsondata.get(queue[qpos+j]).get('set')}"
+            else:
+                set_title = f"{jsondata.get(queue[qpos+j]).get('set')}" 
+            msg = f"**Now Playing: {jsondata.get(queue[qpos+j]).get('performer')} - {set_title}** \n " 
+        else:
+            with open("timequeue.txt",'r') as myfile:
+                settime_sec.append(float(str(myfile.readlines()[0]).strip()))
+            if queue[qpos+j][0].isdigit():
+                set_title = f"DJ {jsondata.get(queue[qpos+j]).get('set')}"
+            else:
+                set_title = f"{jsondata.get(queue[qpos+j]).get('set')}" 
+            time_out = math.ceil(next_time + time.time()) 
+            msg = msg + f"**{j}.** {jsondata.get(queue[qpos+j]).get('performer')} - {set_title} <t:{time_out}:R>, <t:{time_out}:t> \n "
+            next_time = math.ceil(next_time + settime_sec[j])
+        j+=1
+    await ctx.send(embed=discord.Embed(title="Queue:", description=msg))
+
+@bot.command()
+async def np(ctx):
+    title = f"Now playing `{now_playing.get('artist')} - {now_playing.get('title')}`"
+    if queue[qpos][0].isdigit():
+        set_title = f"Dischead Jockeys {jsondata.get(queue[qpos]).get('set')}"
+    else:
+        set_title = f"{jsondata.get(queue[qpos]).get('set')}"
+    
+    desc = f"{set_title}, performed by `{jsondata.get(queue[qpos]).get('performer')}` \n {sec_to_hms(current_timestamp)}/{time_hms}"
+    color_hold = jsondata.get(queue[qpos]).get('color')     
+    color = int(color_hold[1:], 16)
+    await ctx.send(embed=discord.Embed(title = title, description=desc, color = color))
+
+
+@bot.command()
+async def about(ctx):
+            
+            kyllian_user = bot.get_user(264585115726905346)
+            info_message_embed = discord.Embed(title=f"Jockey • Bot by {kyllian_user.name}#{(kyllian_user.discriminator)}", color=0x00aeff, timestamp=datetime.datetime.now())
+            info_message_embed.set_thumbnail(url=kyllian_user.avatar.url)
+            info_message_embed.set_footer(text=f"© 2023 Toxin_X", icon_url=bot.user.avatar.url)
+            await ctx.send(embed=info_message_embed)
+
+
 
 
 @tasks.loop(seconds=0.5)
@@ -122,7 +241,8 @@ async def setplay(queue, jsondata):
     global current_timestamp
     global qpos
     global played_tracks
-    print(queue, str(qpos))
+    global sid_played
+    global current_msgs
     if bot_voice_client.is_paused():
         pass
     elif bot_voice_client == None or bot_voice_client.is_playing() == False:
@@ -137,46 +257,71 @@ async def setplay(queue, jsondata):
             random.shuffle(queue)
             qpos = -1
         elif qpos < len(queue):
-
-            file = jsondata.get(queue[qpos]).get("file")
-            ffmpegcheck = os.system(f'ffprobe -i {file} -show_entries format=duration -of csv="p=0" > time.txt')
-            if ffmpegcheck == 1:
-                raise FileNotFoundError
-            with open("time.txt",'r') as myfile:
-                time_sec = float(str(myfile.readlines()[0]).strip())
-                global time_hms    
-                time_hms = sec_to_hms(time_sec)
-            color_hold = jsondata.get(queue[qpos]).get('color')     
-            color = int(color_hold[1:], 16)
-            #print(jsondata.get(queue[qpos]).get("file"))
-            bot_voice_client.play(discord.FFmpegOpusAudio(source=jsondata.get(queue[qpos]).get("file")))
-            await bot_voice_client.channel.send(embed=discord.Embed(title =f"Now Playing `{jsondata.get(queue[qpos]).get('performer')} - Dischead Jockeys {jsondata.get(queue[qpos]).get('set')}` ", description=f"Originally aired on:  `{jsondata.get(queue[qpos]).get('date')}`", color = color))
+            if sid_played == True:
+                file = jsondata.get(queue[qpos]).get("file")
+                ffmpegcheck = os.system(f'ffprobe -i {file} -show_entries format=duration -of csv="p=0" > time.txt')
+                if ffmpegcheck == 1:
+                    raise FileNotFoundError
+                with open("time.txt",'r') as myfile:
+                    global time_sec
+                    time_sec = float(str(myfile.readlines()[0]).strip())
+                    global time_hms    
+                    time_hms = sec_to_hms(time_sec)
+                color_hold = jsondata.get(queue[qpos]).get('color')     
+                color = int(color_hold[1:], 16)
+                #print(queue[qpos])
+               
+                if queue[qpos][0].isdigit():
+                    set_title = f"Dischead Jockeys {jsondata.get(queue[qpos]).get('set')}"
+                else:
+                    set_title = f"{jsondata.get(queue[qpos]).get('set')}"
+                
+                bot_voice_client.play(discord.FFmpegOpusAudio(source=jsondata.get(queue[qpos]).get("file")))
+                await bot_voice_client.channel.send(embed=discord.Embed(title =f"Now Playing `{jsondata.get(queue[qpos]).get('performer')} - {set_title}` ", description=f"Originally aired on:  `{jsondata.get(queue[qpos]).get('date')}`", color = color))
+                sid_played = False
+                for j in current_msgs:
+                    await j.delete()
+                    asyncio.sleep(1)
+            else:
+                id_file = random.choice(sid_list)
+                bot_voice_client.play(discord.FFmpegOpusAudio(source= f"sids/{id_file}"))
+                print(id_file)
+                sid_played=True
     else:
         current_timestamp += 0.5
         #print(jsondata.get(queue[qpos]).get("tracks"))
         #print(sec_to_hms(current_timestamp))
         for i in jsondata.get(queue[qpos]).get("tracks"):
-            time = mmss_to_sec(jsondata.get(queue[qpos]).get("tracks").get(i).get("timestamp"))
+            track_timestamp = mmss_to_sec(jsondata.get(queue[qpos]).get("tracks").get(i).get("timestamp"))
             #print(i)
             #print(played_tracks)
             if not i in played_tracks:
                 track = jsondata.get(queue[qpos]).get("tracks").get(i)
                 #print(current_timestamp, time, track)
                 #print(played_tracks)
-                if current_timestamp > float(time):
+                if current_timestamp > float(track_timestamp):
+                        global now_playing
+                        now_playing = track
                         played_tracks.append(i)
+                        if queue[qpos][0].isdigit():
+                            set_title = f"Dischead Jockeys {jsondata.get(queue[qpos]).get('set')}"
+                        else:
+                            set_title = f"{jsondata.get(queue[qpos]).get('set')}"
+                        
                         title = f"Now playing `{track.get('artist')} - {track.get('title')}`"
-                        desc = f"Dischead Jockeys {jsondata.get(queue[qpos]).get('set')}, performed by `{jsondata.get(queue[qpos]).get('performer')}` \n {sec_to_hms(current_timestamp)}/{time_hms}"
+                        desc = f"{set_title}, performed by `{jsondata.get(queue[qpos]).get('performer')}` \n {sec_to_hms(current_timestamp)}/{time_hms}"
                         color_hold = jsondata.get(queue[qpos]).get('color')     
                         color = int(color_hold[1:], 16)
-                        await bot_voice_client.channel.send(embed=discord.Embed(title = title, description=desc, color = color))
+                        msg = await bot_voice_client.channel.send(embed=discord.Embed(title = title, description=desc, color = color))
+                        current_msgs.append(msg)
                         await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=f"{track.get('artist')} - {track.get('title')}"))
 
 
 @bot.event
 async def on_ready():
     await bot.wait_until_ready()
-    await queuebuild()    
+    await queuebuild()
+    await sidbuild()    
     print("ready")
 if __name__ == "__main__":
     try:

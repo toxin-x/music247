@@ -131,4 +131,6 @@ dmypy.json
 setlists
 setlists(store)
 time.txt
+timequeue.txt
 .vscode
+sids
