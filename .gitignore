@@ -129,5 +129,6 @@ dmypy.json
 .pyre/
 
 setlists
+setlists(store)
 time.txt
 .vscode
