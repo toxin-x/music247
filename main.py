@@ -310,12 +310,11 @@ async def np(ctx):
 
 @bot.command()
 async def about(ctx):
-            
-            kyllian_user = bot.get_user(264585115726905346)
-            info_message_embed = discord.Embed(title=f"Jockey • Bot by {kyllian_user.name}#{(kyllian_user.discriminator)}", color=0x00aeff, timestamp=datetime.datetime.now())
-            info_message_embed.set_thumbnail(url=kyllian_user.avatar.url)
-            info_message_embed.set_footer(text=f"© 2023 Toxin_X", icon_url=bot.user.avatar.url)
-            await ctx.send(embed=info_message_embed)
+    kyllian_user = bot.get_user(264585115726905346)
+    info_message_embed = discord.Embed(title=f"Jockey • Bot by {kyllian_user.name}#{(kyllian_user.discriminator)}", color=0x00aeff, timestamp=datetime.datetime.now())
+    info_message_embed.set_thumbnail(url=kyllian_user.avatar.url)
+    info_message_embed.set_footer(text=f"© 2023 Toxin_X", icon_url=bot.user.avatar.url)
+    await ctx.send(embed=info_message_embed)
 
 
 
@@ -382,7 +381,7 @@ async def setplay(queue, jsondata):
             track_timestamp = mmss_to_sec(jsondata.get(queue[qpos]).get("tracks").get(i).get("timestamp"))
             #print(i)
             #print(played_tracks)
-            if not i in played_tracks:
+            if not i in played_tracks and sid_played == False:
                 track = jsondata.get(queue[qpos]).get("tracks").get(i)
                 #print(current_timestamp, time, track)
                 #print(played_tracks)
