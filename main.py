@@ -198,8 +198,20 @@ async def skip(ctx):
         bot_voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
         bot_voice_client.stop()
         await ctx.send(embed=discord.Embed(description="File skipped", color=0x00aeff))
+        
+@bot.command()
+@commands.has_role(int(MOD_ID))
+async def shuffle(ctx):
+    print("old", queue)
+    random.shuffle(queue)
+    print("new", queue)
+    
+    bot_voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    bot_voice_client.stop()
 
-
+    await ctx.send(embed=discord.Embed(title="Shuffled Queue"))
+    
+    
 #USER COMMANDS
 
 @bot.command()
