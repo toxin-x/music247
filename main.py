@@ -101,7 +101,7 @@ async def sidbuild():
 async def qbuild(ctx):
     await queuebuild()
     
-    ctx.send(str(new_sets))
+    await ctx.send(str(new_sets))
 
 
 @bot.command()
