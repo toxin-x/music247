@@ -66,8 +66,10 @@ async def queuebuild():
     mypath = "setlists"
     global new_sets
     new_sets = [] 
-    tracklists = [f for f in os.listdir(mypath) if os.path.isfile(os.path.join(mypath, f)) ]
+    tracklists = sorted([f for f in os.listdir(mypath) if os.path.isfile(os.path.join(mypath, f)) ])
+    #print()
     for set in tracklists:
+        print(set)
         if not set in queue:
             with open(mypath + "/" + set) as json_file:
                 jsondata[set] = json.load(json_file)
@@ -100,7 +102,34 @@ async def qbuild(ctx):
     await queuebuild()
     
     ctx.send(str(new_sets))
-    
+
+
+@bot.command()
+@commands.has_role(int(MOD_ID))
+async def setadd(ctx, args, args2):
+        
+        builder = {}
+        mypath = "setlists/"
+        set = ctx.message.attachments[0]
+        set_name = ctx.message.attachments[0].filename
+        set_file = await ctx.message.attachments[0].save(mypath + set_name)
+        
+        with open(mypath + set_name, "r") as json_file:
+            data = json.load(json_file)
+            print(args, args2)
+            if not "file" in data:
+                #x,y = str(args).split()
+                builder["uid"] = str(args)
+                builder["file"] = str(args2)
+                builder.update(data)
+                #print(data)
+                with open(mypath + "/" + set_name, "w") as json_file:
+                    json.dump(builder, json_file, indent = 2)
+                await ctx.send(embed=discord.Embed(description=f"added uid: {str(args)} \n file: {str(args2)}"))
+
+
+
+
 @bot.command()
 @commands.has_role(int(MOD_ID))
 async def join(ctx):
@@ -168,7 +197,7 @@ async def seek(ctx, text):
 async def skip(ctx):
         bot_voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
         bot_voice_client.stop()
-        await ctx.send(embed=discord.Embed(description="File stopped.", color=0x00aeff))
+        await ctx.send(embed=discord.Embed(description="File skipped", color=0x00aeff))
 
 
 #USER COMMANDS
@@ -179,6 +208,7 @@ async def q(ctx):
     timeleft= time_sec - current_timestamp
     msg = ""
     global qpos
+    global settime_sec
     settime_sec = [0]
     while j < 6 and j < len(queue) - qpos:
 #        print("-------------")
@@ -207,6 +237,49 @@ async def q(ctx):
             msg = msg + f"**{j}.** {jsondata.get(queue[qpos+j]).get('performer')} - {set_title} <t:{time_out}:R>, <t:{time_out}:t> \n "
             next_time = math.ceil(next_time + settime_sec[j])
         j+=1
+    await ctx.send(embed=discord.Embed(title="Queue:", description=msg))
+    
+@bot.command()
+async def setq(ctx):
+    j=1
+    #timeleft= time_sec - current_timestamp
+    msg = ""
+    global qpos
+    timeleft= time_sec - current_timestamp
+    global settime_sec
+    settime_sec = [0]
+    next_time = 0
+
+    #print(len(played_tracks))
+    print(current_timestamp)
+    setq_left = len(jsondata.get(queue[qpos]).get("tracks")) - len(played_tracks)
+    while j < 6 and j < setq_left:
+        k = j + len(played_tracks)
+        
+        file = jsondata.get(queue[qpos]).get("file")
+        ffmpegcheck = os.system(f'ffprobe -i {file} -show_entries format=duration -of csv="p=0" > timequeue.txt')
+        print(settime_sec)
+        print(j)
+        print(k)
+        
+        if ffmpegcheck == 1:
+            raise FileNotFoundError 
+        
+        if j == 1:
+            with open("timequeue.txt",'r') as myfile:
+                settime_sec[0] = (float(str(myfile.readlines()[0]).strip())) 
+            next_time = timeleft
+            msg = ("Now Playing" + ": " + jsondata.get(queue[qpos]).get("tracks").get(str(k-1)).get("artist") + " - " + jsondata.get(queue[qpos]).get("tracks").get(str(k-1)).get("title") + "\n")
+        
+        else:
+            with open("timequeue.txt",'r') as myfile:
+                settime_sec.append(float(str(myfile.readlines()[0]).strip()))
+            msg = msg + (str(j-1) + ": " + jsondata.get(queue[qpos]).get("tracks").get(str(k-1)).get("artist") + " - " + jsondata.get(queue[qpos]).get("tracks").get(str(k-1)).get("title") + "\n")
+            
+            next_time = math.ceil(next_time + settime_sec[j-1])
+        
+        j += 1
+    
     await ctx.send(embed=discord.Embed(title="Queue:", description=msg))
 
 @bot.command()
@@ -247,8 +320,9 @@ async def setplay(queue, jsondata):
         pass
     elif bot_voice_client == None or bot_voice_client.is_playing() == False:
         current_timestamp = 0
-        qpos += 1
         played_tracks=[]
+        if sid_played == True:
+            qpos += 1
         #print(queue)
         if bot_voice_client == None:
             vc = await discord.object(voice_channel).connect()
@@ -257,6 +331,7 @@ async def setplay(queue, jsondata):
             random.shuffle(queue)
             qpos = -1
         elif qpos < len(queue):
+            #print(qpos)
             if sid_played == True:
                 file = jsondata.get(queue[qpos]).get("file")
                 ffmpegcheck = os.system(f'ffprobe -i {file} -show_entries format=duration -of csv="p=0" > time.txt')
@@ -279,13 +354,13 @@ async def setplay(queue, jsondata):
                 bot_voice_client.play(discord.FFmpegOpusAudio(source=jsondata.get(queue[qpos]).get("file")))
                 await bot_voice_client.channel.send(embed=discord.Embed(title =f"Now Playing `{jsondata.get(queue[qpos]).get('performer')} - {set_title}` ", description=f"Originally aired on:  `{jsondata.get(queue[qpos]).get('date')}`", color = color))
                 sid_played = False
-                for j in current_msgs:
-                    await j.delete()
-                    asyncio.sleep(1)
+                # for j in current_msgs:
+                #     await j.delete()
+                #     asyncio.sleep(1)
             else:
                 id_file = random.choice(sid_list)
                 bot_voice_client.play(discord.FFmpegOpusAudio(source= f"sids/{id_file}"))
-                print(id_file)
+                #print(id_file)
                 sid_played=True
     else:
         current_timestamp += 0.5
