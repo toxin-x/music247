@@ -1,3 +1,4 @@
+
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
@@ -11,7 +12,7 @@ import asyncio
 import time
 import datetime
 import math
-
+from pydub import AudioSegment
 
 load_dotenv()
 
@@ -89,23 +90,17 @@ async def queue_build():
                 else:
                     nofile.append(set)
     print(f"Queue: {queueList} \n No File: {nofile}")
-    await sidbuild()
+#    await sidbuild()
 
-async def sidbuild():
-    mypath = "sids"
-    global new_sids
-    global sid_list
-    new_sids = []
-    sid_list = [f for f in os.listdir(
-        mypath) if os.path.isfile(os.path.join(mypath, f))]
-    print(sid_list)
-    # for sid in sids:
-    #     if not sid in sid_list:
-    #         print(sid_list)
-    #         sid_list.append(sid)
-    #         new_sids.append(sid)
-    #         print(new_sids)
-
+# async def sidbuild():
+#     mypath = "sids"
+#     global new_sids
+#     global sid_vox_list
+#     global sid_tracks_list
+#     new_sids = []
+#     sid_vox_list = [f for f in os.listdir(mypath + "vox") if os.path.isfile(os.path.join(mypath + "vox", f))]
+#     sid_tracks_list = [f for f in os.listdir(mypath + "tracks") if os.path.isfile(os.path.join(mypath + "tracks", f))]
+#     print(sid_vox_list, sid_tracks_list)
 
 # MOD COMMANDS
 
@@ -454,9 +449,26 @@ async def setplay(queueList, jsondata):
                 #     await j.delete()
                 #     asyncio.sleep(1)
             else:
-                id_file = random.choice(sid_list)
-                bot_voice_client.play(
-                    discord.FFmpegOpusAudio(source=f"sids/{id_file}"))
+                with open("sids/sids.json") as jsonfile:
+                    data = json.load(jsonfile)
+                    voxpath="sids/vox"
+                    voxfolder = sorted([f for f in os.listdir(voxpath) if os.path.isfile(os.path.join(voxpath, f))])
+
+
+                rand_track = random.choice(data.get("tracks"))
+                file = rand_track.get("file")
+                pos = rand_track.get("pos")
+                rand_vox = os.path.join(voxpath, random.choice(voxfolder))
+
+
+                track = AudioSegment.from_file(file, format="wav")
+                vox =  AudioSegment.from_file(rand_vox, format="mp3")
+                louder = vox + 8
+                overlay = track.overlay(louder, position=pos)
+                print(file, rand_vox)
+                file_handle = overlay.export("output.mp3", format="mp3")
+
+                bot_voice_client.play(discord.FFmpegOpusAudio(source=f"output.mp3"))
                 # print(id_file)
                 sid_played = True
     else:
@@ -494,7 +506,7 @@ async def setplay(queueList, jsondata):
 async def on_ready():
     await bot.wait_until_ready()
     await queue_build()
-    await sidbuild()
+    # await sidbuild()
     random.shuffle(queueList)
     print(len(queueList), queueList)
     print("ready")
