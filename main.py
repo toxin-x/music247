@@ -71,6 +71,7 @@ async def queue_build():
     mypath = "setlists"
     global new_sets
     new_sets = []
+    nofile = []
     tracklists = sorted([f for f in os.listdir(
         mypath) if os.path.isfile(os.path.join(mypath, f))])
     # print()
@@ -88,7 +89,7 @@ async def queue_build():
                 else:
                     nofile.append(set)
     print(f"Queue: {queueList} \n No File: {nofile}")
-
+    await sidbuild()
 
 async def sidbuild():
     mypath = "sids"
@@ -131,8 +132,9 @@ async def showsets(ctx: commands.Context):
     tracklists = sorted(queueList)
     with open("sets.txt", "w") as setout:
         setout.writelines("\n".join(tracklists))
-        setout.write("\n\nSets with no audio file: \n")
-        setout.writelines("\n".join(nofile))
+        if len(nofile) < 0:
+            setout.write("\n\nSets with no audio file: \n")
+            setout.writelines("\n".join(nofile))
     with open("sets.txt", "rb") as setout:
         await ctx.send(f"There are currently {len(tracklists)} sets: ", file=discord.File(setout, "sets.txt"))
 
@@ -149,7 +151,13 @@ async def setadd(ctx, args, args2):
     else:
         set_name = ctx.message.attachments[0].filename
         set_file = await ctx.message.attachments[0].save(mypath + set_name)
-
+        ffmpegcheck = os.system(
+            f'ffprobe -i {args2} -show_entries format=duration -of csv="p=0" > timequeue.txt')
+        if ffmpegcheck == 1:
+            raise FileNotFoundError
+        with open("timequeue.txt", 'r') as myfile:
+            j = myfile.readlines()[0].strip()
+            set_length = float(j)
         with open(mypath + set_name, "r") as json_file:
             data = json.load(json_file)
             print(args, args2)
@@ -157,15 +165,17 @@ async def setadd(ctx, args, args2):
                 # x,y = str(args).split()
                 builder["uid"] = str(args)
                 builder["file"] = str(args2)
+                builder["set_len"] = set_length
                 builder.update(data)
                 # print(data)
-                with open(mypath + "/" + set_name, "w") as json_file:
+                with open(mypath + set_name, "w") as json_file:
                     json.dump(builder, json_file, indent=2)
-                await ctx.send(embed=discord.Embed(title=str(set_name), description=f"added:\n uid: {str(args)} \n file: {str(args2)}"))
+                await ctx.send(embed=discord.Embed(title=str(set_name), description=f"added:\n uid: {str(args)} \n length: sec: {str(set_length)}, mm:ss: {sec_to_hms(set_length)}  \n file: {str(args2)}"))
             elif "file" in data:
                 data["file"]
                 ctx.send(embed=discord.Embed(title=str(
                     set_name), description=f"already has: \n uid: {str(data['uid'])} \n file: {str(data['file'])}"))
+            
         await queue_build()
         await ctx.send(embed=discord.Embed(title="added new sets:", description=str(new_sets)))
 
@@ -278,13 +288,8 @@ async def queue(ctx: commands.Context):
     while j < 6 and j < len(queueList) - qpos:
         #        print("-------------")
         file = jsondata.get(queueList[qpos+j]).get("file")
-        ffmpegcheck = os.system(
-            f'ffprobe -i {file} -show_entries format=duration -of csv="p=0" > timequeue.txt')
-        if ffmpegcheck == 1:
-            raise FileNotFoundError
         if j == 0:
-            with open("timequeue.txt", 'r') as myfile:
-                settime_sec[0] = (float(str(myfile.readlines()[0]).strip()))
+            settime_sec[0] = jsondata.get(queueList[qpos]).get("set_len")
             next_time = timeleft
             time_out = math.ceil(next_time + time.time())
             if queueList[qpos+j][0].isdigit():
@@ -293,13 +298,12 @@ async def queue(ctx: commands.Context):
                 set_title = f"{jsondata.get(queueList[qpos+j]).get('set')}"
             msg = f"**Now Playing: {jsondata.get(queueList[qpos+j]).get('performer')} - {set_title}** \n "
         else:
-            with open("timequeue.txt", 'r') as myfile:
-                settime_sec.append(float(str(myfile.readlines()[0]).strip()))
+            settime_sec.append(jsondata.get(queueList[qpos]).get("set_len"))
             if queueList[qpos+j][0].isdigit():
                 set_title = f"DJ {jsondata.get(queueList[qpos+j]).get('set')}"
             else:
                 set_title = f"{jsondata.get(queueList[qpos+j]).get('set')}"
-            time_out = math.ceil(next_time + time.time())
+            time_out = round(next_time + time.time())
             msg = msg + \
                 f"**{j}.** {jsondata.get(queueList[qpos+j]).get('performer')} - {set_title} <t:{time_out}:R>, <t:{time_out}:t> \n "
             next_time = math.ceil(next_time + settime_sec[j])
@@ -320,33 +324,24 @@ async def setqueue(ctx: commands.Context):
 
     # print(len(played_tracks))
     print(current_timestamp)
-    setq_left = len(jsondata.get(queueList[qpos]).get(
-        "tracks")) - len(played_tracks)
+    setq_left = len(jsondata.get(queueList[qpos]).get("tracks")) - len(played_tracks)
     while j < 6 and j < setq_left:
         k = j + len(played_tracks)
 
         file = jsondata.get(queueList[qpos]).get("file")
-        ffmpegcheck = os.system(
-            f'ffprobe -i {file} -show_entries format=duration -of csv="p=0" > timequeue.txt')
         print(settime_sec)
         print(j)
         print(k)
 
-        if ffmpegcheck == 1:
-            raise FileNotFoundError
-
         if j == 1:
-            with open("timequeue.txt", 'r') as myfile:
-                settime_sec[0] = (float(str(myfile.readlines()[0]).strip()))
+            
+            settime_sec[0] = jsondata.get(queueList[qpos]).get("set_len")
             next_time = timeleft
-            msg = ("Now Playing" + ": " + jsondata.get(queueList[qpos]).get("tracks").get(str(k-1)).get(
-                "artist") + " - " + jsondata.get(queueList[qpos]).get("tracks").get(str(k-1)).get("title") + "\n")
+            msg = ("Now Playing" + ": " + jsondata.get(queueList[qpos]).get("tracks").get(str(k-1)).get("artist") + " - " + jsondata.get(queueList[qpos]).get("tracks").get(str(k-1)).get("title") + "\n")
 
         else:
-            with open("timequeue.txt", 'r') as myfile:
-                settime_sec.append(float(str(myfile.readlines()[0]).strip()))
-            msg = msg + (str(j-1) + ": " + jsondata.get(queueList[qpos]).get("tracks").get(str(k-1)).get(
-                "artist") + " - " + jsondata.get(queueList[qpos]).get("tracks").get(str(k-1)).get("title") + "\n")
+            settime_sec.append(jsondata.get(queueList[qpos]).get("set_len"))
+            msg = msg + (str(j-1) + ": " + jsondata.get(queueList[qpos]).get("tracks").get(str(k-1)).get("artist") + " - " + jsondata.get(queueList[qpos]).get("tracks").get(str(k-1)).get("title") + "\n")
 
             next_time = math.ceil(next_time + settime_sec[j-1])
 
@@ -406,16 +401,10 @@ async def setplay(queueList, jsondata):
         elif qpos < len(queueList):
             # print(qpos)
             if sid_played == True:
-                file = jsondata.get(queueList[qpos]).get("file")
-                ffmpegcheck = os.system(
-                    f'ffprobe -i {file} -show_entries format=duration -of csv="p=0" > time.txt')
-                if ffmpegcheck == 1:
-                    raise FileNotFoundError
-                with open("time.txt", 'r') as myfile:
-                    global time_sec
-                    time_sec = float(str(myfile.readlines()[0]).strip())
-                    global time_hms
-                    time_hms = sec_to_hms(time_sec)
+                global time_sec
+                time_sec = jsondata.get(queueList[qpos]).get("set_len")
+                global time_hms
+                time_hms = sec_to_hms(time_sec)
                 color_hold = jsondata.get(queueList[qpos]).get('color')
                 color = int(color_hold[1:], 16)
                 # print(queueList[qpos])
