@@ -278,14 +278,18 @@ async def shuffle(ctx: commands.Context):
 # USER COMMANDS
 
 @bot.hybrid_command(name = "queue", with_app_command = True, description = "view queue")
-async def queue(ctx: commands.Context):
+async def queue(ctx: commands.Context, page: Optional[int] = 1):
     j = 0
     timeleft = time_sec - current_timestamp
     msg = ""
     global qpos
     global settime_sec
     settime_sec = [0]
-    while j < 6 and j < len(queueList) - qpos:
+    if page < 1:
+        page = 1
+    page_len = 6
+    k = (page_len*page) - page 
+    while j < k and j < len(queueList) - qpos:
         #        print("-------------")
         file = jsondata.get(queueList[qpos+j]).get("file")
         if j == 0:
@@ -296,7 +300,8 @@ async def queue(ctx: commands.Context):
                 set_title = f"DJ {jsondata.get(queueList[qpos+j]).get('set')}"
             else:
                 set_title = f"{jsondata.get(queueList[qpos+j]).get('set')}"
-            msg = f"**Now Playing: {jsondata.get(queueList[qpos+j]).get('performer')} - {set_title}** \n "
+            if j > k-page_len: 
+                msg = f"**Now Playing: {jsondata.get(queueList[qpos+j]).get('performer')} - {set_title}** \n "
         else:
             settime_sec.append(jsondata.get(queueList[qpos]).get("set_len"))
             if queueList[qpos+j][0].isdigit():
@@ -304,11 +309,11 @@ async def queue(ctx: commands.Context):
             else:
                 set_title = f"{jsondata.get(queueList[qpos+j]).get('set')}"
             time_out = round(next_time + time.time())
-            msg = msg + \
-                f"**{j}.** {jsondata.get(queueList[qpos+j]).get('performer')} - {set_title} <t:{time_out}:R>, <t:{time_out}:t> \n "
+            if j > k-page_len: 
+                msg = msg + f"**{j}.** {jsondata.get(queueList[qpos+j]).get('performer')} - {set_title} <t:{time_out}:R>, <t:{time_out}:t> \n "
             next_time = math.ceil(next_time + settime_sec[j])
         j += 1
-    await ctx.send(embed=discord.Embed(title="Queue:", description=msg))
+    await ctx.send(embed=discord.Embed(title="Queue:", description=msg).set_footer(text=f"{page}/{math.ceil((len(queueList)-qpos)/(page_len-1))}"))
 
 
 @bot.hybrid_command(name = "setqueue", with_app_command = True, description ="see the upcoming songs in set")
@@ -463,6 +468,8 @@ async def on_ready():
     await bot.wait_until_ready()
     await queue_build()
     await sidbuild()
+    random.shuffle(queueList)
+    print(len(queueList), queueList)
     print("ready")
 if __name__ == "__main__":
     try:
