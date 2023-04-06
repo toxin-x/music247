@@ -182,16 +182,27 @@ async def setadd(ctx, args, args2):
 
 @bot.hybrid_command(name = "connect", with_app_command = True, description = "connect to vc")
 @commands.has_role(int(MOD_ID))
-async def connect(ctx: commands.Context):
+async def connect(ctx: commands.Context, channel: Optional[discord.VoiceChannel]):
+    print(ctx)
     try:
-        voice_channel = ctx.author.voice.channel
+        #await ctx.defer()
+        if channel:
+            voice_channel = channel
+        else:
+            voice_channel = ctx.author.voice.channel
         await voice_channel.connect()
         global abc
         abc = ctx.guild
         await asyncio.sleep(1.5)
+        await ctx.send(embed=discord.Embed(title=f"connected to {voice_channel.mention}"))
         await setplay.start(queueList, jsondata)
-        ctx.send(embed= discord.Embed(title=f"connected"))
-    except:
+        
+        print(voice_channel)
+    except Exception as ex:
+        #if type(ex) == AttributeError
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        message = template.format(type(ex).__name__, ex.args)
+        print(message)
         await ctx.send(embed=discord.Embed(description="You are not in a voice channel", color=0x00aeff))
 
 
@@ -368,6 +379,21 @@ async def np(ctx: commands.Context):
     color = int(color_hold[1:], 16)
     await ctx.send(embed=discord.Embed(title=title, description=desc, color=color))
 
+@bot.hybrid_command(name = "socials", with_app_command = True, description ="socials of performer")
+async def socials(ctx: commands.Context):
+    socials = jsondata.get(queueList[qpos]).get('socials')
+    desc = ""
+    color_hold = jsondata.get(queueList[qpos]).get('color')
+    color = int(color_hold[1:], 16)
+    for i in socials:
+        if socials.get(i):
+            print(i, socials.get(i))
+            if i == "setlink":
+                j = "set link"
+            else:
+                j = i
+            desc = desc + (f"[{j}]({socials.get(i)}) \n")
+    await ctx.send(embed=discord.Embed(title=f"{jsondata.get(queueList[qpos]).get('performer')} Socials:", description=desc, color=color))
 
 @bot.hybrid_command(name = "about", with_app_command = True, description ="about the bot")
 async def about(ctx: commands.Context):
@@ -422,6 +448,7 @@ async def setplay(queueList, jsondata):
                 bot_voice_client.play(discord.FFmpegOpusAudio(
                     source=jsondata.get(queueList[qpos]).get("file")))
                 await bot_voice_client.channel.send(embed=discord.Embed(title=f"Now Playing `{jsondata.get(queueList[qpos]).get('performer')} - {set_title}` ", description=f"Originally aired on:  `{jsondata.get(queueList[qpos]).get('date')}`", color=color))
+                await socials(bot_voice_client.channel)
                 sid_played = False
                 # for j in current_msgs:
                 #     await j.delete()
