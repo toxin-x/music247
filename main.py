@@ -12,7 +12,6 @@ import asyncio
 import time
 import datetime
 import math
-from pydub import AudioSegment
 
 load_dotenv()
 
@@ -454,22 +453,19 @@ async def setplay(queueList, jsondata):
                     voxpath="sids/vox"
                     voxfolder = sorted([f for f in os.listdir(voxpath) if os.path.isfile(os.path.join(voxpath, f))])
 
-
                 rand_track = random.choice(data.get("tracks"))
                 file = rand_track.get("file")
                 pos = rand_track.get("pos")
+                has_vox = rand_track.get("vox")
                 rand_vox = os.path.join(voxpath, random.choice(voxfolder))
 
+                if rand_vox.endswith("silent_half-second.mp3"):
+                    has_vox = 0
 
-                track = AudioSegment.from_file(file, format="wav")
-                vox =  AudioSegment.from_file(rand_vox, format="mp3")
-                louder = vox + 8
-                overlay = track.overlay(louder, position=pos)
-                print(file, rand_vox)
-                file_handle = overlay.export("output.mp3", format="mp3")
-
-                bot_voice_client.play(discord.FFmpegOpusAudio(source=f"output.mp3"))
-                # print(id_file)
+                if has_vox == 1:
+                    bot_voice_client.play(discord.FFmpegOpusAudio(source=f"{rand_vox}", before_options=f"-i {file}", options=f'-filter_complex "[0]adelay=0:all=1,volume=0.85[0a];[1]adelay={pos}:all=1,volume=1.35[1a];[0a][1a]amix=inputs=2[a]" -map "[a]"'))
+                else:
+                    bot_voice_client.play(discord.FFmpegOpusAudio(source=f"{file}", options='-filter_complex "volume=0.6"'))
                 sid_played = True
     else:
         current_timestamp += 0.5
