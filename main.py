@@ -12,6 +12,24 @@ import asyncio
 import time
 import datetime
 import math
+import logging
+import logging.handlers
+
+logger = logging.getLogger('discord')
+logger.setLevel(logging.DEBUG)
+logging.getLogger('discord.http').setLevel(logging.INFO)
+
+handler = logging.handlers.RotatingFileHandler(
+    filename='discord.log',
+    encoding='utf-8',
+    maxBytes=32 * 1024 * 1024,  # 32 MiB
+    backupCount=5,  # Rotate through 5 files
+)
+dt_fmt = '%Y-%m-%d %H:%M:%S'
+formatter = logging.Formatter('[{asctime}] [{levelname:<8}] {name}: {message}', dt_fmt, style='{')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
 
 load_dotenv()
 
@@ -76,19 +94,16 @@ async def queue_build():
         mypath) if os.path.isfile(os.path.join(mypath, f))])
     # print()
     for set in tracklists:
-        print(set)
         if not set in queueList:
             with open(mypath + "/" + set) as json_file:
                 jsontemp = json.load(json_file)
                 if "file" in jsontemp:
                     jsondata[set] = jsontemp
-                    # print(jsondata)
                     queueList.append(set)
                     new_sets.append(set)
-                    # print(new_sets)
                 else:
                     nofile.append(set)
-    print(f"Queue: {queueList} \n No File: {nofile}")
+    logging.info(f"Queue: {queueList} \n No File: {nofile}")
 #    await sidbuild()
 
 # async def sidbuild():
@@ -154,14 +169,13 @@ async def setadd(ctx, args, args2):
             set_length = float(j)
         with open(mypath + set_name, "r") as json_file:
             data = json.load(json_file)
-            print(args, args2)
+            logging.debug("added files" + args, args2)
             if not "file" in data:
                 # x,y = str(args).split()
                 builder["uid"] = str(args)
                 builder["file"] = str(args2)
                 builder["set_len"] = set_length
                 builder.update(data)
-                # print(data)
                 with open(mypath + set_name, "w") as json_file:
                     json.dump(builder, json_file, indent=2)
                 await ctx.send(embed=discord.Embed(title=str(set_name), description=f"added:\n uid: {str(args)} \n length: sec: {str(set_length)}, mm:ss: {sec_to_hms(set_length)}  \n file: {str(args2)}"))
@@ -174,10 +188,9 @@ async def setadd(ctx, args, args2):
         await ctx.send(embed=discord.Embed(title="added new sets:", description=str(new_sets)))
 
 
-@bot.hybrid_command(name = "connect", with_app_command = True, description = "connect to vc")
-@commands.has_role(int(MOD_ID))
+@bot.hybrid_command(name = "connect", with_app_command = True, description = "connect to vc", default_permissions="kick_members")
+# @commands.has_role(int(MOD_ID))
 async def connect(ctx: commands.Context, channel: Optional[discord.VoiceChannel]):
-    print(ctx)
     try:
         #await ctx.defer()
         if channel:
@@ -191,7 +204,6 @@ async def connect(ctx: commands.Context, channel: Optional[discord.VoiceChannel]
         await ctx.send(embed=discord.Embed(title=f"connected to {voice_channel.mention}"))
         await setplay.start(queueList, jsondata)
         
-        print(voice_channel)
     except Exception as ex:
         #if type(ex) == AttributeError
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
@@ -270,9 +282,9 @@ async def skip(ctx: commands.Context):
 @bot.hybrid_command(name = "shuffle", with_app_command = True, description = "shuffle queue")
 @commands.has_role(int(MOD_ID))
 async def shuffle(ctx: commands.Context):
-    print("old", queueList)
+    logging.debug("old", queueList)
     random.shuffle(queueList)
-    print("new", queueList)
+    logging.debug("new", queueList)
 
     bot_voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
     bot_voice_client.stop()
@@ -294,13 +306,18 @@ async def queue(ctx: commands.Context, page: Optional[int] = 1):
         page = 1
     page_len = 6
     k = (page_len*page) - page 
+    print(k)
+    if page > math.ceil((len(queueList)-qpos)/(page_len-1)):
+        msg = f"Page {page} does not exist. The last page is {math.ceil((len(queueList)-qpos)/(page_len-1))}"
+        print(msg)
     while j < k and j < len(queueList) - qpos:
+        
         #        print("-------------")
         file = jsondata.get(queueList[qpos+j]).get("file")
         if j == 0:
-            settime_sec[0] = jsondata.get(queueList[qpos]).get("set_len")
+            settime_sec[0] = jsondata.get(queueList[qpos+j]).get("set_len")
             next_time = timeleft
-            time_out = math.ceil(next_time + time.time())
+            time_out = (math.ceil(next_time + time.time()) +20)
             if queueList[qpos+j][0].isdigit():
                 set_title = f"DJ {jsondata.get(queueList[qpos+j]).get('set')}"
             else:
@@ -308,7 +325,7 @@ async def queue(ctx: commands.Context, page: Optional[int] = 1):
             if j > k-page_len: 
                 msg = f"**Now Playing: {jsondata.get(queueList[qpos+j]).get('performer')} - {set_title}** \n "
         else:
-            settime_sec.append(jsondata.get(queueList[qpos]).get("set_len"))
+            settime_sec.append(jsondata.get(queueList[qpos+j]).get("set_len"))
             if queueList[qpos+j][0].isdigit():
                 set_title = f"DJ {jsondata.get(queueList[qpos+j]).get('set')}"
             else:
@@ -316,10 +333,18 @@ async def queue(ctx: commands.Context, page: Optional[int] = 1):
             time_out = round(next_time + time.time())
             if j > k-page_len: 
                 msg = msg + f"**{j}.** {jsondata.get(queueList[qpos+j]).get('performer')} - {set_title} <t:{time_out}:R>, <t:{time_out}:t> \n "
+                print("hi" + str(j))
+                if j == ((len(queueList) - qpos) - 1) :
+                    next_time = math.ceil(next_time + settime_sec[j])
+                    time_out = (math.ceil(next_time + time.time())+20)
+                    msg = msg + f"`Queue will shuffle and restart ` <t:{time_out}:R>, <t:{time_out}:t>"
+                    print("bye" + str(j))
             next_time = math.ceil(next_time + settime_sec[j])
+            
+        print(j, settime_sec[j])
         j += 1
     await ctx.send(embed=discord.Embed(title="Queue:", description=msg).set_footer(text=f"{page}/{math.ceil((len(queueList)-qpos)/(page_len-1))}"))
-
+    print(msg)
 
 @bot.hybrid_command(name = "setqueue", with_app_command = True, description ="see the upcoming songs in set")
 async def setqueue(ctx: commands.Context):
@@ -332,16 +357,12 @@ async def setqueue(ctx: commands.Context):
     settime_sec = [0]
     next_time = 0
 
-    # print(len(played_tracks))
-    print(current_timestamp)
+
     setq_left = len(jsondata.get(queueList[qpos]).get("tracks")) - len(played_tracks)
     while j < 6 and j < setq_left:
         k = j + len(played_tracks)
 
         file = jsondata.get(queueList[qpos]).get("file")
-        print(settime_sec)
-        print(j)
-        print(k)
 
         if j == 1:
             
@@ -357,7 +378,7 @@ async def setqueue(ctx: commands.Context):
 
         j += 1
 
-    await ctx.send(embed=discord.Embed(title="Queue:", description=msg))
+    await ctx.send(embed=discord.Embed(title="Set Queue:", description=msg))
 
 
 @bot.hybrid_command(name = "np", with_app_command = True, description ="see now playing track")
@@ -381,7 +402,7 @@ async def socials(ctx: commands.Context):
     color = int(color_hold[1:], 16)
     for i in socials:
         if socials.get(i):
-            print(i, socials.get(i))
+            logging.debug(i, socials.get(i))
             if i == "setlink":
                 j = "set link"
             else:
@@ -391,10 +412,10 @@ async def socials(ctx: commands.Context):
 
 @bot.hybrid_command(name = "about", with_app_command = True, description ="about the bot")
 async def about(ctx: commands.Context):
-    kyllian_user = bot.get_user(264585115726905346)
+    toxin_user = bot.get_user(264585115726905346)
     info_message_embed = discord.Embed(
-        title=f"Jockey • Bot by {kyllian_user.name}#{(kyllian_user.discriminator)}", color=0x00aeff, timestamp=datetime.datetime.now())
-    info_message_embed.set_thumbnail(url=kyllian_user.avatar.url)
+        title=f"Jockey • Bot by {toxin_user.name}#{(toxin_user.discriminator)}", color=0x00aeff, timestamp=datetime.datetime.now())
+    info_message_embed.set_thumbnail(url=toxin_user.avatar.url)
     info_message_embed.set_footer(
         text=f"© 2023 Toxin_X", icon_url=bot.user.avatar.url)
     await ctx.send(embed=info_message_embed)
@@ -458,10 +479,12 @@ async def setplay(queueList, jsondata):
                 pos = rand_track.get("pos")
                 has_vox = rand_track.get("vox")
                 rand_vox = os.path.join(voxpath, random.choice(voxfolder))
-
+                print (rand_vox)
                 if rand_vox.endswith("silent_half-second.mp3"):
                     has_vox = 0
-
+                else: 
+                    has_vox = 1
+                
                 if has_vox == 1:
                     bot_voice_client.play(discord.FFmpegOpusAudio(source=f"{rand_vox}", before_options=f"-i {file}", options=f'-filter_complex "[0]adelay=0:all=1,volume=0.85[0a];[1]adelay={pos}:all=1,volume=1.35[1a];[0a][1a]amix=inputs=2[a]" -map "[a]"'))
                 else:
@@ -504,8 +527,9 @@ async def on_ready():
     await queue_build()
     # await sidbuild()
     random.shuffle(queueList)
-    print(len(queueList), queueList)
+    logging.info(len(queueList), queueList)
     print("ready")
+    logger.addHandler(handler)
 if __name__ == "__main__":
     try:
         bot.run(TOKEN, reconnect=True)
