@@ -57,7 +57,7 @@ voice_channel = None
 played_tracks = []
 time_sec = None
 time_hms = None
-sid_played = True
+sid_played = False
 sid_list = []
 current_msgs = []
 nofile = []
@@ -150,7 +150,7 @@ async def showsets(ctx: commands.Context):
 
 @bot.command()
 @commands.has_role(int(MOD_ID))
-async def setadd(ctx, args, args2):
+async def setadd(ctx, args: int, args2: str):
 
     builder = {}
     mypath = "setlists/"
@@ -419,7 +419,7 @@ async def about(ctx: commands.Context):
     info_message_embed.set_footer(
         text=f"© 2023 Toxin_X", icon_url=bot.user.avatar.url)
     await ctx.send(embed=info_message_embed)
-
+    
 
 @tasks.loop(seconds=0.5)
 async def setplay(queueList, jsondata):
@@ -439,8 +439,6 @@ async def setplay(queueList, jsondata):
         # print(queueList)
         if bot_voice_client == None:
             vc = await discord.object(voice_channel).connect()
-            vc.play(discord.FFmpegOpusAudio(
-                source=jsondata.get(queueList[qpos]).get("file")))
         elif qpos >= len(queueList):
             random.shuffle(queueList)
             qpos = -1
