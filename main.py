@@ -193,6 +193,7 @@ async def setadd(ctx, args: int, args2: str):
 async def connect(ctx: commands.Context, channel: Optional[discord.VoiceChannel]):
     try:
         #await ctx.defer()
+        global voice_channel
         if channel:
             voice_channel = channel
         else:
@@ -200,6 +201,11 @@ async def connect(ctx: commands.Context, channel: Optional[discord.VoiceChannel]
         await voice_channel.connect()
         global abc
         abc = ctx.guild
+        guild = bot.get_guild(voice_channel.guild.id)
+        bot_member = await guild.fetch_member(bot.user.id)
+        # check if bot is in a stage channel instead of a voice channel and if so, let it speak
+        if (voice_channel.type.name == "stage_voice" and bot_member.voice.suppress is True):
+            await bot_member.edit(suppress=False)
         await asyncio.sleep(1.5)
         await ctx.send(embed=discord.Embed(title=f"connected to {voice_channel.mention}"))
         await setplay.start(queueList, jsondata)
@@ -304,7 +310,7 @@ async def queue(ctx: commands.Context, page: Optional[int] = 1):
     settime_sec = [0]
     if page < 1:
         page = 1
-    page_len = 6
+    page_len = 9
     k = (page_len*page) - page 
     print(k)
     if page > math.ceil((len(queueList)-qpos)/(page_len-1)):
@@ -429,6 +435,7 @@ async def setplay(queueList, jsondata):
     global played_tracks
     global sid_played
     global current_msgs
+    global voice_channel
     if bot_voice_client.is_paused():
         pass
     elif bot_voice_client == None or bot_voice_client.is_playing() == False:
@@ -490,6 +497,11 @@ async def setplay(queueList, jsondata):
                 sid_played = True
     else:
         current_timestamp += 0.5
+        guild = bot.get_guild(voice_channel.guild.id)
+        bot_member = await guild.fetch_member(bot.user.id)
+        # check if bot is in a stage channel instead of a voice channel and if it went back in the audience, let it speak
+        if (voice_channel.type.name == "stage_voice" and bot_member.voice.suppress is True):
+            await bot_member.edit(suppress=False)
         # print(jsondata.get(queueList[qpos]).get("tracks"))
         # print(sec_to_hms(current_timestamp))
         for i in jsondata.get(queueList[qpos]).get("tracks"):
